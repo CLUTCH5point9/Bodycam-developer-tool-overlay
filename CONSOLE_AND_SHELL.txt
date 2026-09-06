@@ -1,0 +1,141 @@
+BODYCAM OVERLAY -- CONSOLE AND SHELL, EXPLAINED
+================================================
+
+There are two separate raw-execution tabs in the app. They are NOT the same
+thing and do NOT run in the same place. Mixing them up is the single most
+common source of confusion, so read this before writing anything ambitious
+in either one.
+
+  Console tab -> runs Lua INSIDE the running Bodycam game process.
+  Shell tab   -> runs a Bash script on YOUR PC, outside the game entirely.
+
+
+------------------------------------------------------------------------
+1. HOW THE CONSOLE TAB WORKS
+------------------------------------------------------------------------
+
+The Console tab does not talk to Bodycam directly. It talks to a small
+UE4SS Lua mod called ClaudeBridge (mod/ClaudeBridge/Scripts/main.lua),
+which must already be installed and running inside the game.
+
+The flow, every time you press "Run":
+
+  1. overlay_app.py's ConsoleTab takes whatever you typed and prepends one
+     line: `local pc = UEHelpers.GetPlayerController()`. That's the only
+     thing it adds -- your code runs exactly as written otherwise.
+  2. That combined string is written to a request file under
+     %LOCALAPPDATA%\Temp\bodycam_bridge\req.txt (see bridge_client.py).
+  3. ClaudeBridge, which is polling that folder from inside the game's own
+     Lua VM every 200ms, picks it up, compiles it, and runs it on the
+     game's main thread (via ExecuteInGameThread -- the only thread it's
+     safe to touch UObjects from).
+  4. Whatever it returns (or prints) gets written to resp.txt.
+  5. bridge_client.py reads that back and the Console tab prints it.
+
+This round trip is why there's a timeout, and why "the game isn't
+responding" almost always means one of: Bodycam isn't running, it's a
+different install than the one install_bridge.py set up, or ClaudeBridge
+was added to mods.txt but the game was hot-reloaded (Ctrl+R) instead of
+fully restarted -- a brand new mod folder is only picked up on a real
+restart.
+
+Globals available inside every Console payload (all injected by
+ClaudeBridge itself, see main.lua lines ~232-236):
+
+  pawn()          Returns the local player's current pawn, or nil. Looks at
+                  PlayerController.Pawn, then .AcknowledgedPawn, then falls
+                  back to UEHelpers.GetPlayer(). This is what most snippets
+                  build on top of.
+  pc              Not a ClaudeBridge global -- added by the Console tab
+                  itself, one line prepended to your code. Just
+                  UEHelpers.GetPlayerController(), for convenience.
+  UEHelpers       The standard UE4SS helper module (GetWorld, GetGameInstance,
+                  GetPlayerController, GetPlayer, etc).
+  props(obj)      Dumps every readable property on obj (or pawn() if you
+                  don't pass one), walking the FULL class chain (own class +
+                  every parent up to but not including UObject). Only "safe"
+                  property types are actually read and shown (ints, floats,
+                  bools, names, object/class references) -- structs, arrays,
+                  maps and sets are listed by name/type only, never read,
+                  because marshalling those across the Lua/native boundary
+                  is a known crash risk. Delegates are skipped entirely.
+  funcs(obj)      Same class-chain walk as props(), but lists every UFunction
+                  name instead of property values. Doesn't tell you the
+                  signature -- just that the function exists and what it's
+                  called.
+  count(clsName)  FindAllOf(clsName) and prints how many instances exist
+                  right now, plus up to 20 of their full paths. Good for
+                  "does this class even exist / is anything spawned".
+  render(v)       Turns any Lua value (including a UObject/struct) into a
+                  readable string -- this is what print() uses internally
+                  in the console, so multi-value prints render sensibly
+                  instead of showing raw userdata addresses.
+  valid(o)        True only if o is non-nil AND o:IsValid() returns true.
+                  Use this before touching any object you didn't just get
+                  from pawn()/UEHelpers -- a stale/destroyed UObject reference
+                  used directly can crash the game.
+  chainOf(obj)    Returns the list of UClass objects from obj's own class up
+                  to (not including) UObject. Mostly useful if you're writing
+                  your own props()/funcs()-style walker.
+  has(obj, name)  True only if obj really has a live UFunction called `name`.
+                  Needed because a missing function shows up as UE4SS's
+                  TrivialObject placeholder, which is also "userdata" --
+                  type() alone can't tell the difference, has() checks the
+                  actual tostring() prefix.
+
+Return values: if your code ends with `return <something>`, ClaudeBridge
+appends it after any print() output as `-- return: <rendered value>`. The
+Console tab shows you everything (prints + that marker); the structured
+game_api.py functions strip everything except the value itself.
+
+History: Alt+Up / Alt+Down cycle through what you've run this session
+(in-memory only, not saved to disk).
+
+Errors: every payload runs inside a pcall on the game's side. A Lua error
+in your code comes back as a normal error message in the output box, not a
+crash -- but that only covers Lua-level errors. Calling a native engine
+function with bad arguments, or touching an invalid/freed UObject, can
+still crash the actual game process the same way any other UE4SS Lua mod
+can. There is no sandbox here. Test one small thing at a time.
+
+Saving a snippet as a button: the "Save as Button..." button next to Run
+opens a small dialog asking for a name and Run Once vs Toggle. See
+PLUGINS.txt for exactly what Toggle mode means (TOGGLE_ON) and how saved
+buttons relate to the Plugins tab -- they're the same underlying mechanism.
+
+
+------------------------------------------------------------------------
+2. HOW THE SHELL TAB WORKS
+------------------------------------------------------------------------
+
+The Shell tab has nothing to do with the game. It runs on YOUR computer,
+as YOUR Windows user, through Git Bash (shell_client.py hard-codes
+C:\Program Files\Git\usr\bin\bash.exe). Whatever you type is written to a
+temp .sh file and executed with `bash <file>`, same as opening a terminal
+yourself and running a script.
+
+There is deliberately NO sandboxing. It has exactly the same access to
+your filesystem, environment variables, and installed tools as a terminal
+window you opened by hand -- because the moment you sandbox a "shell tab"
+it stops being a real shell and starts being a toy. Bash syntax (heredocs,
+export, pipes, cat, curl, whatever Git Bash's userland provides) all works
+normally.
+
+Practical implications:
+  - It can read/write any file your Windows account can, not just files
+    inside this project folder.
+  - A script here can launch other programs, hit the network, install
+    things, or delete things. There's a Timeout field (default 60s) that
+    kills a runaway script, but that's the only real guard rail.
+  - It does NOT reach into the Bodycam process. If you want to affect the
+    running game, that's the Console tab's job, not this one. A shell
+    script CAN write a Lua file to disk and could, in principle, launch a
+    separate tool that talks to the same bridge protocol Console/
+    bridge_client.py use -- but the Shell tab itself never touches the
+    game directly.
+  - History (Alt+Up/Down) works the same as the Console tab, in-memory only.
+
+If a script needs a real path instead of Git Bash's /c/... mount style,
+remember Git Bash still understands normal Windows paths in quotes, e.g.
+"C:\Users\you\Desktop\file.txt" -- you don't have to convert everything to
+/c/Users/you/Desktop/file.txt by hand.

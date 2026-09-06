@@ -1,0 +1,26 @@
+{
+  "_comment": "Curated from Manifest_UFSFiles_Win64.txt. Every map is loaded the same way (direct servertravel with ?game=<mode> forced), so playlist and non-playlist maps behave identically here -- 'playlist' is just a UI grouping hint.",
+
+  "AirSoft":              {"path": "/Game/Map/AirSoft/AirSoft",                          "playlist": true},
+  "BombHouse":            {"path": "/Game/Map/BombHouse/BombHouse",                      "playlist": true},
+  "CQB":                  {"path": "/Game/Map/CQB/CQB",                                  "playlist": true},
+  "Hospital":             {"path": "/Game/Map/Hospital/Hospital",                        "playlist": true},
+  "Trenches":             {"path": "/Game/Map/Tumblewood/Trenches",                      "playlist": true},
+  "Paintball":            {"path": "/Game/Map/Paintball/Paintball",                      "playlist": true},
+  "PublicPool":           {"path": "/Game/Map/PublicPool/PublicPool",                    "playlist": true},
+  "Rome":                 {"path": "/Game/Map/Rome/Rome",                                "playlist": true},
+  "RussianBuilding":      {"path": "/Game/Map/RussianBuilding/RussianBuilding",          "playlist": true},
+  "TheBackrooms":         {"path": "/Game/Map/Backrooms/TheBackrooms",                   "playlist": true},
+  "WornHouse":            {"path": "/Game/Map/WornHouse/WornHouse",                      "playlist": true},
+
+  "Dev Inventory (Theo)": {"path": "/Game/Map/Devs/Dev_Inventory_THEO_ONLY",             "playlist": false},
+  "Loadout Map":          {"path": "/Game/Map/Devs/LoadoutMap",                          "playlist": false},
+  "Loadout Map (Empty)":  {"path": "/Game/Map/Devs/LoadoutMapEmpty",                     "playlist": false},
+  "MoonTown":             {"path": "/Game/MenuSystemPro/ExampleContent/Levels/MoonTown", "playlist": false},
+  "Shooting Range":       {"path": "/Game/Map/ShootingRange/ShootingRange",              "playlist": false},
+  "Lobby":                {"path": "/Game/Map/Lobby/Lobby",                              "playlist": false},
+  "Lobby B":              {"path": "/Game/Map/Lobby/LobbyB",                             "playlist": false},
+  "Lobby Host":           {"path": "/Game/Map/LobbyHost/LobbyHost",                      "playlist": false},
+  "Drone Racetrack":      {"path": "/Game/Doors/Lobby_Drone_Racetrack",                  "playlist": false},
+  "Drone Racetrack 2":    {"path": "/Game/Doors/Lobby_Drone_Racetrack2",                 "playlist": false}
+}

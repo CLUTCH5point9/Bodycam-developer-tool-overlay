@@ -1,0 +1,11 @@
+{
+  "_comment": "Derived from Bodycam/Content/GM/Gamemode/*.uasset (GM_Menu excluded, it's not a playable mode). team_based controls whether the UI shows a Team Cap field. Default caps are the shipped DataAsset defaults, seen in reference.md / confirmed live.",
+
+  "Deathmatch":       {"class": "/Game/GM/Gamemode/GM_Deathmatch.GM_Deathmatch_C",     "team_based": false, "default_cap": 7,  "default_team_size": 1},
+  "Team Deathmatch":  {"class": "/Game/GM/Gamemode/GM_TeamDeathMatch.GM_TeamDeathMatch_C", "team_based": true,  "default_cap": 10, "default_team_size": 5},
+  "Gun Game":         {"class": "/Game/GM/Gamemode/GM_GunGame.GM_GunGame_C",           "team_based": false, "default_cap": 7,  "default_team_size": 1},
+  "Hardpoint":        {"class": "/Game/GM/Gamemode/GM_Hardpoint.GM_Hardpoint_C",       "team_based": true,  "default_cap": 10, "default_team_size": 5},
+  "Body Bomb":        {"class": "/Game/GM/Gamemode/GM_BodyBomb.GM_BodyBomb_C",         "team_based": true,  "default_cap": 10, "default_team_size": 5},
+  "Versus":           {"class": "/Game/GM/Gamemode/GM_Versus.GM_Versus_C",             "team_based": true,  "default_cap": 10, "default_team_size": 5},
+  "Wingman":          {"class": "/Game/GM/Gamemode/GM_Wingman.GM_Wingman_C",           "team_based": true,  "default_cap": 4,  "default_team_size": 2}
+}

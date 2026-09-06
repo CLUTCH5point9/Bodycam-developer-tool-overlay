@@ -1,0 +1,204 @@
+BODYCAM OVERLAY -- PLUGIN SYSTEM, EXPLAINED
+============================================
+
+This covers the Plugins tab and its relationship to the Saved Command
+Buttons tab: what a plugin file actually is, exactly how to write one, and
+how the toggle mechanism works. It does not require changing any of the
+app's Python code -- a plugin is a data file, not a code patch.
+
+
+------------------------------------------------------------------------
+1. THE BIG PICTURE
+------------------------------------------------------------------------
+
+A "plugin" here is a plain JSON file describing a tab full of buttons (plus
+optional section labels/dividers). Nothing more. Loading one doesn't run
+any Python code from the file, doesn't install anything, and can't do
+anything the Console tab couldn't already do by hand -- it's purely a way
+to package and share a themed set of console commands as one file instead
+of retyping them.
+
+Saved Command Buttons (its own tab) and Plugins use the EXACT SAME widget
+format under the hood. The difference is just scope and storage:
+
+  Saved Command Buttons  -- one flat personal list, saved one at a time
+                            from the Console tab's "Save as Button..."
+                            button, stored in
+                            %LOCALAPPDATA%\BodycamOverlay\snippets.json
+  Plugin                 -- a named, shareable bundle of buttons (with
+                            optional labels/separators for layout), loaded
+                            as its own JSON file via "Add Plugin..." in the
+                            Plugins tab, stored in
+                            %LOCALAPPDATA%\BodycamOverlay\plugins\<name>.json
+
+Because they're the same shape, exporting your Saved Command Buttons
+(Export All / Export Selected) produces a file that already works as a
+plugin -- add a "plugin_name" key at the top and it's a valid plugin file.
+
+
+------------------------------------------------------------------------
+2. THE FILE FORMAT
+------------------------------------------------------------------------
+
+A plugin file looks like this:
+
+{
+  "plugin_name": "Movement Toggles",
+  "widgets": [
+    { "widget": "label", "label": "Movement" },
+    {
+      "widget": "button",
+      "label": "Fly",
+      "mode": "toggle",
+      "code": "local p = pawn()\nif not p then return 'no pawn' end\nif TOGGLE_ON then\n  p:SetActorEnableCollision(false)\n  return 'fly ON'\nelse\n  p:SetActorEnableCollision(true)\n  return 'fly OFF'\nend"
+    },
+    { "widget": "separator" },
+    {
+      "widget": "button",
+      "label": "Kill Self",
+      "mode": "run_once",
+      "code": "local p = pawn()\nif not p then return 'no pawn' end\npcall(function() p:K2_DestroyActor() end)\nreturn 'done'"
+    }
+  ]
+}
+
+Top level:
+  plugin_name   (plugin files only -- ignored/optional for a plain Saved
+                Command Buttons export) String shown as the tab's title.
+
+widgets is a list, rendered top to bottom, in order. Each entry has a
+"widget" field:
+
+  "widget": "label"
+    { "widget": "label", "label": "Section title text" }
+    Just a bold heading. No code, no button.
+
+  "widget": "separator"
+    { "widget": "separator" }
+    A horizontal divider line. No other fields.
+
+  "widget": "button"  (or omit "widget" entirely -- "button" is the default,
+                       which is why a plain Saved Command Buttons file, which
+                       predates plugins, still loads fine)
+    "label"   Button text.
+    "code"    The Lua source to run. Exactly what you'd type into the
+              Console tab -- same globals available (pawn(), props(),
+              funcs(), count(), render(), valid(), UEHelpers, etc -- see
+              CONSOLE_AND_SHELL.txt for the full list). NOTE: unlike the
+              live Console tab, a plugin button's code does NOT get the
+              `pc` (PlayerController) convenience variable prepended --
+              call UEHelpers.GetPlayerController() yourself if you need it.
+    "mode"    Either "run_once" or "toggle". Defaults to "run_once" if
+              omitted.
+
+
+------------------------------------------------------------------------
+3. RUN ONCE vs TOGGLE
+------------------------------------------------------------------------
+
+run_once:
+  Click the button, your code runs once, done. No state is tracked.
+
+toggle:
+  Renders as a checkbox instead of a plain button. Every click, BEFORE your
+  code runs, the app injects one extra line ahead of it:
+
+      local TOGGLE_ON = true     -- or false, depending on the checkbox's
+                                  -- NEW state after this click
+
+  Your code is responsible for checking TOGGLE_ON and doing whatever "on"
+  and "off" mean for that feature -- there's no separate on-code/off-code
+  fields, it's one script that branches on that one variable. This mirrors
+  how the app's own built-in toggles (bot-fill, explosive bullets) work
+  internally, just exposed for anything you write yourself.
+
+  If your code errors out, the checkbox automatically reverts to its
+  previous state (the click is treated as if it didn't happen), so the
+  checkbox never lies about whether the effect actually applied.
+
+  The checkbox's on/off state lives only in the running app -- it is NOT
+  saved to disk and does NOT reflect anything read back from the game. If
+  you restart the overlay, every toggle button starts unchecked again
+  regardless of what's actually active in-game. Write your "off" branch so
+  it's safe to run even if the real state doesn't match the checkbox (e.g.
+  don't assume a prior "on" definitely ran).
+
+
+------------------------------------------------------------------------
+4. HOW TO ACTUALLY MAKE ONE
+------------------------------------------------------------------------
+
+Easiest path -- build it through the UI, then export it:
+
+  1. Console tab: write and test your Lua snippet until it does what you
+     want. Test run_once and toggle behavior for real before saving it.
+  2. Click "Save as Button...", give it a name, pick Run Once or Toggle.
+  3. Repeat for as many commands as you want in the pack.
+  4. Saved Command Buttons tab: check the boxes next to the ones you want
+     to share, click "Export Selected...", save the .json file.
+  5. Open that file in a text editor and add a "plugin_name" line at the
+     top level (see format above), and optionally insert "label"/
+     "separator" widgets to organize it into sections.
+  6. That file is now a valid plugin. Plugins tab -> "Add Plugin..." ->
+     pick it. It gets copied into
+     %LOCALAPPDATA%\BodycamOverlay\plugins\ and shows up as its own sub-tab
+     immediately, and every time the app starts from then on.
+
+Or write the JSON by hand from scratch using the format in section 2 --
+there's nothing the UI does that the file format doesn't support directly.
+
+Removing a plugin: select its sub-tab in the Plugins tab, click "Remove
+Selected Plugin". This deletes the underlying file in
+%LOCALAPPDATA%\BodycamOverlay\plugins\ -- there's no per-button removal
+inside a plugin the way Saved Command Buttons has (a plugin is meant to be
+edited as a file and re-added, not picked apart button by button in the UI).
+
+
+------------------------------------------------------------------------
+5. EDITING AN EXISTING PLUGIN
+------------------------------------------------------------------------
+
+A plugin's live copy sits in %LOCALAPPDATA%\BodycamOverlay\plugins\ as a
+plain JSON file. To change one:
+
+  1. Close the overlay (or at least don't rely on hot-editing while it's
+     running -- plugin tabs are only built at startup / on Add Plugin).
+  2. Edit the .json file directly, or remove it via the UI and re-Add a
+     new corrected version.
+  3. Restart the overlay (or Add Plugin again) to see the change.
+
+There's no in-app JSON editor -- deliberately. Plugin authoring is meant to
+happen in a real text editor where you have syntax highlighting and can
+actually see what you're writing; the app's job is just to load, run, and
+manage the resulting files.
+
+
+------------------------------------------------------------------------
+6. LICENSING OF PLUGIN FILES
+------------------------------------------------------------------------
+
+The Bodycam Overlay application itself (everything in this repo except
+plugin content) is MIT-licensed -- see LICENSE.
+
+A plugin file you write is your own separate work. This project doesn't
+claim any license over plugin content, and loading someone else's plugin
+doesn't grant you any rights to redistribute it beyond whatever that
+plugin's own author says (in the plugin file itself, a README next to it,
+wherever they choose to say it). If you're sharing a plugin publicly,
+consider stating your own license/terms somewhere in the file -- e.g. a
+"label" widget at the top, or just alongside it wherever you post it -- so
+people who receive it know where they stand. This project has no mechanism
+to enforce that either way; it's on the honor system between plugin authors
+and whoever they share with.
+
+
+------------------------------------------------------------------------
+7. SAFETY NOTE
+------------------------------------------------------------------------
+
+A plugin's code runs with exactly the same access as anything you'd type
+into the Console tab yourself -- full Lua reflection into the live game
+process, no sandbox. Adding someone else's plugin means running their Lua
+code, unreviewed, inside your game. Read a plugin's "code" fields before
+adding it, the same way you'd read a script before running it in a real
+shell.

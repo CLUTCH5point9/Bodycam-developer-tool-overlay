@@ -1,6 +1,6 @@
 ## IF YOU JUST WANT TO USE THE APP, IGNORE ALL OTHER FILES
 
-**Go to the folder named `THE APP IF U JUST WANT TO USE IT IGNORE OTHER FILES`
+**Go to the folder named `0 - THE APP IF U JUST WANT TO USE IT IGNORE OTHER FILES`
 and download `Bodycam Overlay.exe`. That's the whole app. Everything else in
 this repo is source code you don't need to touch.**
 

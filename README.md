@@ -1,3 +1,16 @@
+## IF YOU JUST WANT TO USE THE APP, IGNORE ALL OTHER FILES
+
+**Go to the folder named `THE APP IF U JUST WANT TO USE IT IGNORE OTHER FILES`
+and download `Bodycam Overlay.exe`. That's the whole app. Everything else in
+this repo is source code you don't need to touch.**
+
+To use it: **close Bodycam first**, then run `Bodycam Overlay.exe` — it
+installs UE4SS/ClaudeBridge automatically. Once that's done, launch Bodycam.
+The app runs in your system tray; press **Insert** to show/hide it, and
+right-click the tray icon any time to exit.
+
+---
+
 # Bodycam Overlay
 
 A standalone desktop control panel for Bodycam — **not injected into the game

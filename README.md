@@ -18,7 +18,7 @@ process**. Toggle it with **Insert**. Requires the game to run in **windowed
 or borderless** mode (a separate window can't render on top of exclusive
 fullscreen).
 
-Created by **clutch5.9**. Licensed under the [MIT License](LICENSE).
+Created by **clutch5.9**. Licensed under the [MIT License](0-LICENSE).
 
 ## Setup (one-time)
 
@@ -89,8 +89,8 @@ after installing the mod.
 
 **Console tab** — a raw Lua console into the live game process, with saved
 history and a "Save as Button..." action. See
-**[CONSOLE_AND_SHELL.txt](CONSOLE_AND_SHELL.txt)** for exactly how this
-works, what globals are available, and its safety model.
+**[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §1 for exactly how this works,
+what globals are available, and its safety model.
 
 **Saved Command Buttons tab** — every snippet you've saved from the Console
 tab, as a scrollable list of Run Once buttons and Toggle checkboxes. Supports
@@ -100,46 +100,26 @@ set of commands with someone else.
 
 **Plugins tab** — load a shareable JSON "plugin" file (same shape as a Saved
 Command Buttons export, plus a name and optional section labels/dividers)
-as its own sub-tab. See **[PLUGINS.txt](PLUGINS.txt)** for the exact file
-format, the Run Once vs Toggle mechanism, and how to write one from scratch
-or by exporting from Console.
+as its own sub-tab. See **[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §3 for
+the exact file format, the Run Once vs Toggle mechanism, and how to write
+one from scratch or by exporting from Console.
 
 **Shell tab** — runs raw Bash scripts on your own PC via Git Bash, entirely
-separate from the game. Also covered in
-**[CONSOLE_AND_SHELL.txt](CONSOLE_AND_SHELL.txt)**.
+separate from the game. Also covered in **[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §2.
 
 **About tab** — credits and license info.
 
 ## Why some data is hand-maintained (`families.json`)
 
-Reading a weapon's actual in-game category tag crashes the process — it's a
-`GameplayTagContainer` read, and that's a documented crash in the UE4SS
-skills this tool is built on. So instead: **individual items are always
-pulled live** (skins, operators, new maps), but **which family belongs to
-which slot category** lives in `families.json`, since that almost never
-changes.
-
-If a game update adds a **wholly new weapon family** (not just a new skin),
-add one line to `families.json`:
-```json
-"NewGun Basic Bundle": {"category": "primary", "prefixes": ["NewGun"]}
-```
-`category` is one of `primary`, `secondary`, `melee`, `lethal`, `perk`,
-`other`. `prefixes` is the item-name prefix(es) used for that weapon's
-"Base X" rows in `DT_NewShopItem` — check with the game running:
-```python
-import game_api as api
-[i for i in api._get_shop_items() if "NewGun" in i]
-```
-Most weapons use their bundle's own name as the prefix. A few don't (M4A1's
-items are named "AR15 Base ...", Remington700 sometimes shows up as
-"Rivington 700 ..."), which is why `prefixes` is a list, not a single string.
-
-`maps.json` and `gamemodes.json` are similarly small and hand-curated — edit
-them the same way if the game adds a new map or mode. All three of these
-files live in `%LOCALAPPDATA%\BodycamOverlay\` once the app has run once
-(seeded from the copies in this folder on first launch) — edit the copy
-there to change behavior without rebuilding the exe.
+Reading a weapon's actual in-game category tag crashes the process, so
+**individual items are always pulled live** (skins, operators, new maps),
+but **which family belongs to which slot category** is hand-curated in
+`families.json` (with `maps.json`/`gamemodes.json` alongside it for maps and
+modes) since that almost never changes. All three live in
+`%LOCALAPPDATA%\BodycamOverlay\` once the app has run once — edit the copy
+there to change behavior without rebuilding the exe. See
+**[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §5.3 for exactly how to add a
+new weapon family.
 
 ## Packaging as an .exe
 
@@ -162,8 +142,7 @@ install_bridge.py      Finds the game, deploys UE4SS + ClaudeBridge
 families.json, maps.json, gamemodes.json    Hand-curated config (see above)
 mod/ClaudeBridge/       The UE4SS Lua mod this whole app talks to
 ue4ss_bundle/            A full copy of RE-UE4SS (MIT-licensed, see its own LICENSE)
-CONSOLE_AND_SHELL.txt  How the Console and Shell tabs work
-PLUGINS.txt              How the plugin file format and toggle system work
+1-DOCUMENTATION.md    Console/Shell/Plugins reference, troubleshooting, and internals
 ```
 
 ## Known limitations / things worth testing more
@@ -190,7 +169,7 @@ PLUGINS.txt              How the plugin file format and toggle system work
 
 ## License
 
-[MIT](LICENSE) for this application's own code. The bundled UE4SS under
+[MIT](0-LICENSE) for this application's own code. The bundled UE4SS under
 `ue4ss_bundle/` carries its own MIT license from its original author. Plugin
 files people write for the Plugins tab are their own separate work — see
-**[PLUGINS.txt](PLUGINS.txt)** section 6.
+**[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §3.6.

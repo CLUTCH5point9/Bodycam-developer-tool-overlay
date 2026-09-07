@@ -342,10 +342,7 @@ class HostTab(ttk.Frame):
             self.app.status(f"Loaded {name}: {result}")
             self.app.root.after(4000, self._refresh_state)
 
-        def err(e):
-            self.app.status(f"ERROR loading match: {e}", bad=True)
-
-        self.app.runner.run(work, done, err)
+        self.app.runner.run(work, done, self.app.on_error("ERROR loading match"))
 
     def _refresh_state(self):
         def work():
@@ -361,10 +358,7 @@ class HostTab(ttk.Frame):
                     self.state_box.insert(tk.END, f"{k}: {state.get(k)}\n")
             self.state_box.configure(state="disabled")
 
-        def err(e):
-            self.app.status(f"state check failed: {e}", bad=True)
-
-        self.app.runner.run(work, done, err)
+        self.app.runner.run(work, done, self.app.on_error("state check failed"))
 
     def _cycle(self):
         fallback = self.last_hosted["map_path"] if self.last_hosted else None
@@ -379,10 +373,7 @@ class HostTab(ttk.Frame):
             self.app.status(f"Cycled: {result['mode_name']} cap={result['cap']} team={result['team_size']}")
             self.app.root.after(4000, self._refresh_state)
 
-        def err(e):
-            self.app.status(f"ERROR cycling: {e}", bad=True)
-
-        self.app.runner.run(work, done, err)
+        self.app.runner.run(work, done, self.app.on_error("ERROR cycling"))
 
     def _force_end(self):
         self.app.status("Forcing round end...")
@@ -394,10 +385,7 @@ class HostTab(ttk.Frame):
             self.app.status(f"Round end: {result}")
             self.app.root.after(2000, self._refresh_state)
 
-        def err(e):
-            self.app.status(f"ERROR: {e}", bad=True)
-
-        self.app.runner.run(work, done, err)
+        self.app.runner.run(work, done, self.app.on_error())
 
 
 class LoadoutTab(ttk.Frame):
@@ -457,7 +445,7 @@ class LoadoutTab(ttk.Frame):
             self.loadout_var.set("1")
             self._refresh()
 
-        self.app.runner.run(work, done, lambda e: self.app.status(f"loadout load failed: {e}", bad=True))
+        self.app.runner.run(work, done, self.app.on_error("loadout load failed"))
 
     def _on_loadout_change(self, _evt=None):
         self.loadout_idx = int(self.loadout_var.get()) - 1
@@ -474,7 +462,7 @@ class LoadoutTab(ttk.Frame):
             for i, s in enumerate(data["slots"]):
                 self._rows[f"slot{i}"].configure(text=f'{s["weapon"]}  [{s["bundle"]}]')
 
-        self.app.runner.run(work, done, lambda e: self.app.status(f"refresh failed: {e}", bad=True))
+        self.app.runner.run(work, done, self.app.on_error("refresh failed"))
 
     def _set_active(self):
         idx = self.loadout_idx
@@ -486,7 +474,7 @@ class LoadoutTab(ttk.Frame):
         def done(result):
             self.app.status(f"Loadout {idx+1} active: {result}")
 
-        self.app.runner.run(work, done, lambda e: self.app.status(f"ERROR: {e}", bad=True))
+        self.app.runner.run(work, done, self.app.on_error())
 
     def _change(self, key):
         if key == "operator":
@@ -499,7 +487,7 @@ class LoadoutTab(ttk.Frame):
                 self.app.status(f"{len(ops)} operators loaded")
                 PickerDialog(self.app.root, "Choose Operator", ops, self._apply_operator)
 
-            self.app.runner.run(work, done, lambda e: self.app.status(f"ERROR: {e}", bad=True))
+            self.app.runner.run(work, done, self.app.on_error())
             return
 
         slot_idx = int(key.replace("slot", ""))
@@ -542,7 +530,7 @@ class LoadoutTab(ttk.Frame):
             PickerDialog(self.app.root, f"Choose {bundle} skin", items,
                          lambda item: self._apply_slot(slot_idx, bundle, item))
 
-        self.app.runner.run(work, done, lambda e: self.app.status(f"ERROR: {e}", bad=True))
+        self.app.runner.run(work, done, self.app.on_error())
 
     def _apply_slot(self, slot_idx, bundle, item):
         idx = self.loadout_idx
@@ -555,7 +543,7 @@ class LoadoutTab(ttk.Frame):
             self.app.status(f"Loadout {idx+1} slot {slot_idx+1} -> {item}")
             self._refresh()
 
-        self.app.runner.run(work, done, lambda e: self.app.status(f"ERROR: {e}", bad=True))
+        self.app.runner.run(work, done, self.app.on_error())
 
     def _apply_operator(self, operator_name):
         idx = self.loadout_idx
@@ -568,7 +556,7 @@ class LoadoutTab(ttk.Frame):
             self.app.status(f"Loadout {idx+1} operator -> {operator_name}")
             self._refresh()
 
-        self.app.runner.run(work, done, lambda e: self.app.status(f"ERROR: {e}", bad=True))
+        self.app.runner.run(work, done, self.app.on_error())
 
 
 def run_cheat_snippet(app, snippet, on_extra_done=None):
@@ -659,36 +647,14 @@ class SpeedTab(ttk.Frame):
         self.app.runner.run(work, done, lambda e: None)
 
 
-class ConsoleTab(ttk.Frame):
-    """Raw Lua console -- same bridge everything else uses, no training wheels."""
+class ConsoleShellMixin:
+    """Shared history + output-log behavior for ConsoleTab and ShellTab --
+    both bind Alt+Up/Alt+Down history and log to a colored Text widget the
+    same way, so it lives here once instead of twice. Each subclass's
+    __init__ still sets up self.history=[], self.hist_idx=0 and its own
+    input_box before calling _build_output_area()/_bind_history_keys()."""
 
-    def __init__(self, parent, app):
-        super().__init__(parent)
-        self.app = app
-        self.history = []
-        self.hist_idx = 0
-
-        tk.Label(self, text="Lua (payload globals: pawn() props() funcs() count() render() valid() "
-                             "UEHelpers, plus 'pc' = current PlayerController):",
-                 bg=BG, fg=FG).pack(anchor="w", padx=8, pady=(8, 0))
-
-        self.input_box = tk.Text(self, height=6, bg="#2a2a33", fg=FG, insertbackground=FG,
-                                  font=("Consolas", 10))
-        self.input_box.pack(fill="x", padx=8, pady=(2, 4))
-        self.input_box.insert("1.0", "return 1+1")
-        self.input_box.bind("<Control-Return>", self._run_from_input)
-        self.input_box.bind("<Alt-Up>", self._history_prev)
-        self.input_box.bind("<Alt-Down>", self._history_next)
-
-        btn_row = tk.Frame(self, bg=BG)
-        btn_row.pack(fill="x", padx=8)
-        tk.Button(btn_row, text="Run  (Ctrl+Enter)", bg=ACCENT, fg="white",
-                  command=self._run_from_input).pack(side="left")
-        tk.Button(btn_row, text="Save as Button...", bg=GOOD, fg="white",
-                  command=self._save_as_button).pack(side="left", padx=6)
-        tk.Button(btn_row, text="Clear Output", command=self._clear_output).pack(side="left", padx=6)
-        tk.Label(btn_row, text="Alt+Up/Down: history", bg=BG, fg="#888").pack(side="right")
-
+    def _build_output_area(self):
         tk.Label(self, text="Output:", bg=BG, fg=FG).pack(anchor="w", padx=8, pady=(8, 0))
         out_frame = tk.Frame(self, bg=BG)
         out_frame.pack(fill="both", expand=True, padx=8, pady=(2, 8))
@@ -702,6 +668,11 @@ class ConsoleTab(ttk.Frame):
         self.output_box.tag_configure("err", foreground=BAD)
         self.output_box.tag_configure("ok", foreground=GOOD)
 
+    def _bind_history_keys(self):
+        self.input_box.bind("<Control-Return>", self._run_from_input)
+        self.input_box.bind("<Alt-Up>", self._history_prev)
+        self.input_box.bind("<Alt-Down>", self._history_next)
+
     def _log(self, text, tag=None):
         self.output_box.configure(state="normal")
         self.output_box.insert(tk.END, text + "\n", tag or ())
@@ -712,18 +683,6 @@ class ConsoleTab(ttk.Frame):
         self.output_box.configure(state="normal")
         self.output_box.delete("1.0", tk.END)
         self.output_box.configure(state="disabled")
-
-    def _run_from_input(self, _evt=None):
-        code = self.input_box.get("1.0", tk.END).strip()
-        if not code:
-            return "break"
-        self.history.append(code)
-        self.hist_idx = len(self.history)
-        self._log(f">>> {code}", "cmd")
-        # `pc` is just a local declaration -- safe to prepend to ANY payload,
-        # including one that ends with the user's own `return`.
-        self._execute("local pc = UEHelpers.GetPlayerController()\n" + code)
-        return "break"  # swallow the Enter keypress in Ctrl+Enter binding
 
     def _history_prev(self, _evt=None):
         if not self.history:
@@ -741,6 +700,49 @@ class ConsoleTab(ttk.Frame):
         if self.hist_idx < len(self.history):
             self.input_box.insert("1.0", self.history[self.hist_idx])
         return "break"
+
+
+class ConsoleTab(ConsoleShellMixin, ttk.Frame):
+    """Raw Lua console -- same bridge everything else uses, no training wheels."""
+
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.history = []
+        self.hist_idx = 0
+
+        tk.Label(self, text="Lua (payload globals: pawn() props() funcs() count() render() valid() "
+                             "UEHelpers, plus 'pc' = current PlayerController):",
+                 bg=BG, fg=FG).pack(anchor="w", padx=8, pady=(8, 0))
+
+        self.input_box = tk.Text(self, height=6, bg="#2a2a33", fg=FG, insertbackground=FG,
+                                  font=("Consolas", 10))
+        self.input_box.pack(fill="x", padx=8, pady=(2, 4))
+        self.input_box.insert("1.0", "return 1+1")
+        self._bind_history_keys()
+
+        btn_row = tk.Frame(self, bg=BG)
+        btn_row.pack(fill="x", padx=8)
+        tk.Button(btn_row, text="Run  (Ctrl+Enter)", bg=ACCENT, fg="white",
+                  command=self._run_from_input).pack(side="left")
+        tk.Button(btn_row, text="Save as Button...", bg=GOOD, fg="white",
+                  command=self._save_as_button).pack(side="left", padx=6)
+        tk.Button(btn_row, text="Clear Output", command=self._clear_output).pack(side="left", padx=6)
+        tk.Label(btn_row, text="Alt+Up/Down: history", bg=BG, fg="#888").pack(side="right")
+
+        self._build_output_area()
+
+    def _run_from_input(self, _evt=None):
+        code = self.input_box.get("1.0", tk.END).strip()
+        if not code:
+            return "break"
+        self.history.append(code)
+        self.hist_idx = len(self.history)
+        self._log(f">>> {code}", "cmd")
+        # `pc` is just a local declaration -- safe to prepend to ANY payload,
+        # including one that ends with the user's own `return`.
+        self._execute("local pc = UEHelpers.GetPlayerController()\n" + code)
+        return "break"  # swallow the Enter keypress in Ctrl+Enter binding
 
     def _save_as_button(self):
         code = self.input_box.get("1.0", tk.END).strip()
@@ -941,14 +943,8 @@ class PluginsTab(ttk.Frame):
 
 
 class AboutTab(ttk.Frame):
-    """Credits/license info. Note for anyone forking this (the whole point of
-    it being open source): this tab is a normal, editable Python class like
-    any other -- there is no way to make credit 'tamper-proof' in a project
-    whose source is public. The actual, enforceable mechanism for keeping
-    attribution attached is the MIT license itself (see LICENSE): it requires
-    the copyright notice to be kept in any redistributed copy, source or
-    binary. This tab exists to make that credit visible, not to prevent
-    someone from deleting it -- that was never something Python could do."""
+    """Credits/license info -- see 1-DOCUMENTATION.md §5.6 for why this tab
+    can't be made "tamper-proof" and what actually enforces attribution."""
 
     def __init__(self, parent, app):
         super().__init__(parent)
@@ -962,7 +958,7 @@ class AboutTab(ttk.Frame):
 
         tk.Label(self, text="Created by clutch5.9", bg=BG, fg=FG,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=16, pady=(0, 2))
-        tk.Label(self, text="Licensed under the MIT License. See LICENSE in the project folder.",
+        tk.Label(self, text="Licensed under the MIT License. See 0-LICENSE in the project folder.",
                  bg=BG, fg="#888").pack(anchor="w", padx=16, pady=(0, 16))
 
         tk.Label(self, text="Third-party components:", bg=BG, fg=FG,
@@ -971,17 +967,15 @@ class AboutTab(ttk.Frame):
                              "(bundled under ue4ss_bundle/, see its own LICENSE file)",
                  bg=BG, fg="#888", justify="left").pack(anchor="w", padx=16, pady=(0, 16))
 
-        tk.Label(self, text="Docs: CONSOLE_AND_SHELL.txt and PLUGINS.txt in the project folder "
-                             "explain how those tabs and the plugin format work.",
+        tk.Label(self, text="Docs: 1-DOCUMENTATION.md in the project folder explains the Console/"
+                             "Shell tabs, the plugin format, and troubleshooting.",
                  bg=BG, fg="#888", wraplength=600, justify="left").pack(anchor="w", padx=16)
 
 
-class ShellTab(ttk.Frame):
-    """Runs arbitrary shell scripts locally via Git Bash -- separate from the
-    Lua console above, which only talks to the game. This runs on your own
-    machine with your own user permissions, same as a terminal window; no
-    sandboxing, by design, since that would defeat the point of a real shell
-    tab. Scripts written with bash syntax (heredocs, export, etc.) run as-is."""
+class ShellTab(ConsoleShellMixin, ttk.Frame):
+    """Runs arbitrary shell scripts locally via Git Bash -- see
+    1-DOCUMENTATION.md §2 for the full safety rationale (no sandboxing, by
+    design)."""
 
     def __init__(self, parent, app):
         super().__init__(parent)
@@ -997,9 +991,7 @@ class ShellTab(ttk.Frame):
                                   font=("Consolas", 10))
         self.input_box.pack(fill="x", padx=8, pady=(2, 4))
         self.input_box.insert("1.0", "echo hello from bash\npwd")
-        self.input_box.bind("<Control-Return>", self._run_from_input)
-        self.input_box.bind("<Alt-Up>", self._history_prev)
-        self.input_box.bind("<Alt-Down>", self._history_next)
+        self._bind_history_keys()
 
         btn_row = tk.Frame(self, bg=BG)
         btn_row.pack(fill="x", padx=8)
@@ -1012,29 +1004,7 @@ class ShellTab(ttk.Frame):
         tk.Button(btn_row, text="Clear Output", command=self._clear_output).pack(side="left", padx=6)
         tk.Label(btn_row, text="Alt+Up/Down: history", bg=BG, fg="#888").pack(side="right")
 
-        tk.Label(self, text="Output:", bg=BG, fg=FG).pack(anchor="w", padx=8, pady=(8, 0))
-        out_frame = tk.Frame(self, bg=BG)
-        out_frame.pack(fill="both", expand=True, padx=8, pady=(2, 8))
-        scrollbar = tk.Scrollbar(out_frame)
-        scrollbar.pack(side="right", fill="y")
-        self.output_box = tk.Text(out_frame, bg="#141418", fg=FG, font=("Consolas", 10),
-                                   yscrollcommand=scrollbar.set, state="disabled")
-        self.output_box.pack(fill="both", expand=True)
-        scrollbar.config(command=self.output_box.yview)
-        self.output_box.tag_configure("cmd", foreground=ACCENT)
-        self.output_box.tag_configure("err", foreground=BAD)
-        self.output_box.tag_configure("ok", foreground=GOOD)
-
-    def _log(self, text, tag=None):
-        self.output_box.configure(state="normal")
-        self.output_box.insert(tk.END, text + "\n", tag or ())
-        self.output_box.see(tk.END)
-        self.output_box.configure(state="disabled")
-
-    def _clear_output(self):
-        self.output_box.configure(state="normal")
-        self.output_box.delete("1.0", tk.END)
-        self.output_box.configure(state="disabled")
+        self._build_output_area()
 
     def _run_from_input(self, _evt=None):
         script = self.input_box.get("1.0", tk.END)
@@ -1067,23 +1037,6 @@ class ShellTab(ttk.Frame):
             self.app.status("Shell script failed to launch", bad=True)
 
         self.app.runner.run(work, done, err)
-        return "break"
-
-    def _history_prev(self, _evt=None):
-        if not self.history:
-            return "break"
-        self.hist_idx = max(0, self.hist_idx - 1)
-        self.input_box.delete("1.0", tk.END)
-        self.input_box.insert("1.0", self.history[self.hist_idx])
-        return "break"
-
-    def _history_next(self, _evt=None):
-        if not self.history:
-            return "break"
-        self.hist_idx = min(len(self.history), self.hist_idx + 1)
-        self.input_box.delete("1.0", tk.END)
-        if self.hist_idx < len(self.history):
-            self.input_box.insert("1.0", self.history[self.hist_idx])
         return "break"
 
 
@@ -1139,9 +1092,7 @@ class App:
 
     def _start_tray_icon(self):
         """A real taskbar/system-tray presence with a proper Exit option --
-        without this, the only way to fully close the app is Task Manager,
-        since the window itself just hides (by design, so Insert keeps working)
-        rather than quitting when you click its X button."""
+        see 1-DOCUMENTATION.md §5.6 for why the window itself only hides."""
         try:
             image = Image.open(os.path.join(api._HERE, "app_icon.ico")).convert("RGBA")
         except Exception:
@@ -1160,11 +1111,8 @@ class App:
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
     def quit_app(self):
-        """Actually terminates the app -- the tray's Exit item, and the only
-        clean way to close it besides Task Manager. Uses os._exit rather than
-        relying on the mainloop returning naturally: the `keyboard` library's
-        hook thread isn't guaranteed to be a daemon thread, so just destroying
-        the Tk root could leave the process hanging around after "Exit"."""
+        """Actually terminates the app (the tray's Exit item). Uses os._exit
+        rather than a normal mainloop return -- see 1-DOCUMENTATION.md §5.6."""
         try:
             self.tray_icon.stop()
         except Exception:
@@ -1178,8 +1126,7 @@ class App:
     def _run_setup_check(self):
         """Runs once at startup: makes sure ClaudeBridge (and, if it's already
         on this machine, the bundled UE4SS copy) is in place before the first
-        connection poll. See install_bridge.py for what is and isn't automated
-        here and why."""
+        connection poll. See install_bridge.py / 1-DOCUMENTATION.md §5.4."""
         def prompt_for_path():
             messagebox.showinfo(
                 "Bodycam not found",
@@ -1220,6 +1167,12 @@ class App:
         self.status_var.set(text)
         self.status_lbl.configure(fg=BAD if bad else FG)
 
+    def on_error(self, prefix="ERROR"):
+        """Shorthand for the common AsyncRunner error handler: show the
+        exception in the status bar with a prefix, e.g. as the third argument
+        to self.runner.run(work, done, ...)."""
+        return lambda e: self.status(f"{prefix}: {e}", bad=True)
+
     def _poll_connection(self):
         def work():
             return api.is_connected()
@@ -1249,11 +1202,7 @@ class App:
 
 
 # Arbitrary fixed local port used purely as a single-instance lock -- binding
-# it is the mutex. A second launch failing to bind means an instance is
-# already running: two copies would each register their own Insert hotkey
-# (the "opens two windows" symptom) AND race on the same bridge req/resp files
-# with no locking between them, which is almost certainly what broke command
-# execution -- one instance's response getting consumed by the other's request.
+# it is the mutex. See 1-DOCUMENTATION.md §5.6 for what breaks without it.
 _SINGLE_INSTANCE_PORT = 47821
 
 

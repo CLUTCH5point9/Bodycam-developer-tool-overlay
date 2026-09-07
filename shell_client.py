@@ -1,8 +1,5 @@
-"""Runs arbitrary shell scripts locally via Git Bash, so scripts written with
-bash syntax (heredocs, `export`, POSIX conditionals) run as-is -- no rewriting
-into PowerShell or Lua. This executes on your own machine with your own user
-permissions, same as opening a terminal yourself; there's no sandboxing here
-by design, since restricting it would defeat the point of a real shell tab.
+"""Runs arbitrary shell scripts locally via Git Bash -- no sandboxing, by
+design. See 1-DOCUMENTATION.md section 2 for the full safety rationale.
 """
 import os
 import subprocess

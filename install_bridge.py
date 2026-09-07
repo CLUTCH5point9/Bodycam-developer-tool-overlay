@@ -1,17 +1,9 @@
 """Setup logic for getting ClaudeBridge running in Bodycam.
 
-ue4ss_bundle/ holds a straight copy of the UE4SS + enabler-mod files that were
-ALREADY installed and running on this machine all night -- not anything
-downloaded fresh from the internet. Deploying a user's own, already-vetted
-files to a game folder they own is a different thing than an exe silently
-fetching and planting unknown injection tooling; that's the line this stays on
-the right side of. If ue4ss_bundle/ is ever missing (e.g. a fresh checkout of
-just the source, without re-running the bundling step), this falls back to
-just pointing at the official release instead of guessing.
-
-ClaudeBridge itself -- our own transparent Lua mod, bundled under
-mod/ClaudeBridge/ -- is always deployed the same way, on top of whichever
-UE4SS ends up in place.
+Deploys the bundled ue4ss_bundle/ (if UE4SS isn't already installed) and
+mod/ClaudeBridge/ into the game's Binaries/Win64, registering the mod in
+mods.txt. Design rationale for what gets bundled/deployed and why: see
+1-DOCUMENTATION.md section 5.4.
 
 Callable standalone (`python install_bridge.py`) or imported by overlay_app.py
 to run automatically on startup.
@@ -46,15 +38,10 @@ def find_game_root():
 
 
 def has_ue4ss(win64):
-    """True only for a UE4SS install that will actually WORK -- checking just
-    the ue4ss/ folder's existence isn't enough. Found live on a fresh install:
-    ue4ss/ existed, but ue4ss/Mods/shared/ (the shared UEHelpers Lua library
-    several mods, including ClaudeBridge, require()) was missing, so every mod
-    that needed it crashed on its very first line with 'module UEHelpers not
-    found' -- ClaudeBridge included, meaning it never even started polling for
-    requests. That's a silent, total failure that LOOKS like a connectivity
-    problem from the overlay's side, so this check has to catch it, not just
-    confirm the folder is present."""
+    """True only for a UE4SS install that will actually work -- also checks
+    for the shared UEHelpers Lua library mods require(), not just the ue4ss/
+    folder's existence. See 1-DOCUMENTATION.md section 5.4 for why that
+    distinction matters."""
     ue4ss_dir = os.path.join(win64, "ue4ss")
     if not os.path.isdir(ue4ss_dir):
         return False

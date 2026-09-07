@@ -13,9 +13,9 @@ them.
 4. It shows up as its own sub-tab immediately, and every time the app starts
    from then on.
 
-See [PLUGINS.txt](../PLUGINS.txt) for the exact file format, how Run Once vs
-Toggle buttons work, and how to write your own plugin from scratch or by
-exporting from the Console tab.
+See [1-DOCUMENTATION.md](../1-DOCUMENTATION.md) §3 for the exact file
+format, how Run Once vs Toggle buttons work, and how to write your own
+plugin from scratch or by exporting from the Console tab.
 
 ## Contributing a plugin
 

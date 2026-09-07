@@ -1,27 +1,12 @@
 --[[
   ClaudeBridge -- file-based RPC into a live UE4SS-modded game.
+  Protocol, safety rationale, and the Python side: see 1-DOCUMENTATION.md
+  section 5.1 in the repo root.
 
   Install:
     <game>\Binaries\Win64\ue4ss\Mods\ClaudeBridge\Scripts\main.lua
     add "ClaudeBridge : 1" to ue4ss\Mods\mods.txt
     restart the game (a NEW mod folder is not picked up by CTRL+R)
-
-  Protocol
-    req.txt   line 1 = request id (integer), lines 2+ = Lua source
-    resp.txt  line 1 = request id
-              line 2 = OK | ERR
-              lines 3+ = captured print() output, then "-- return:" + value
-
-  The directory lives under %LOCALAPPDATA%\Temp because a game launched by a
-  store client usually cannot write inside Program Files without elevation.
-
-  Safety
-    * ONE LoopAsync, ONE ExecuteInGameThread per request, gated by `busy` --
-      overlapping in-game-thread callbacks crash in process_simple_actions
-      (UE4SS #1180, unfixed as of 3.0.1).
-    * The request is consumed BEFORE execution, so a payload that crashes the
-      game cannot replay itself on the next launch.
-    * Every payload runs under pcall; an error is reported, not fatal.
 ]]
 
 local UEHelpers = require("UEHelpers")

@@ -2,10 +2,11 @@
 gvas2 (Loadout.sav file editing) behind clean functions.
 
 Design rule: individual items (skins, operators, maps found on disk) are always
-pulled live/fresh. Only the small family->category mapping in families.json is
-hand-maintained, because the game's own per-item category tag can't be read
-without crashing it (GameplayTagContainer reads are a known crash, see the
-ue5-ue4ss-live-mod and bodycam-ue4ss-modding skill notes).
+pulled live/fresh; only the family->category mapping in families.json is
+hand-maintained (see 1-DOCUMENTATION.md section 5.3 for why). Rationale for
+the trickier live-game hacks below (bot fill, explosive bullets, cap/travel
+ordering, cycle_match's map-name matching) is centralized in that same file,
+section 5.5, rather than repeated per function.
 """
 import json
 import os
@@ -41,24 +42,25 @@ for _cfg_name in ("families.json", "maps.json", "gamemodes.json"):
 
 
 def _load_json(name):
+    """Loads a config file, dropping any "_..." documentation keys (see
+    families.json's own "_comment")."""
     with open(os.path.join(_CONFIG_DIR, name), encoding="utf-8") as f:
-        return json.load(f)
+        return {k: v for k, v in json.load(f).items() if not k.startswith("_")}
 
 
-FAMILIES = {k: v for k, v in _load_json("families.json").items() if not k.startswith("_")}
-MAPS = {k: v for k, v in _load_json("maps.json").items() if not k.startswith("_")}
-GAMEMODES = {k: v for k, v in _load_json("gamemodes.json").items() if not k.startswith("_")}
+FAMILIES, MAPS, GAMEMODES = {}, {}, {}
+_CONFIG_FILES = {"families.json": FAMILIES, "maps.json": MAPS, "gamemodes.json": GAMEMODES}
 
 
 def reload_configs():
     """Re-reads families.json / maps.json / gamemodes.json from disk in place
     (so a running overlay picks up hand edits without restarting)."""
-    FAMILIES.clear()
-    FAMILIES.update({k: v for k, v in _load_json("families.json").items() if not k.startswith("_")})
-    MAPS.clear()
-    MAPS.update({k: v for k, v in _load_json("maps.json").items() if not k.startswith("_")})
-    GAMEMODES.clear()
-    GAMEMODES.update({k: v for k, v in _load_json("gamemodes.json").items() if not k.startswith("_")})
+    for _fname, _target in _CONFIG_FILES.items():
+        _target.clear()
+        _target.update(_load_json(_fname))
+
+
+reload_configs()
 
 
 # --------------------------------------------------------------------------- connectivity
@@ -374,10 +376,9 @@ return tostring(ok)
 
 
 def write_cap(cap, team_size=None, bots=None, timeout=15):
-    """Writes MaxPlayers (and optionally TeamMaxSize, HMS_bBotsMethod) ONLY if not
-    in StartRound. HMS_bBotsMethod lives on the GameMode, not the GameInstance --
-    confirmed live (gi.HMS_bBotsMethod is a TrivialObject, gm.HMS_bBotsMethod is a
-    real bool). Returns a status string; caller should check for 'ABORT' and retry."""
+    """Writes MaxPlayers (and optionally TeamMaxSize, HMS_bBotsMethod) only if
+    not in StartRound (see 1-DOCUMENTATION.md §5.5). Returns a status string;
+    caller should check for 'ABORT' and retry."""
     ts_line = f"pcall(function() gm.ConfigDataAsset.TeamConfig.TeamMaxSize={team_size} end)" if team_size is not None else ""
     bots_line = f"pcall(function() gm.HMS_bBotsMethod={str(bool(bots)).lower()} end)" if bots is not None else ""
     lua = f"""
@@ -410,17 +411,11 @@ def write_cap_retrying(cap, team_size=None, bots=None, attempts=8, delay=2.0, ti
 
 
 def spawn_bots_to_target(target_count, timeout=15):
-    """Manually fills to target_count via GameMode:SpawnBot(), one per 4s
-    (match16.lua's proven-safe pacing -- 25 in one callback froze the game once).
-    This bypasses ShouldSpawnBots()/HMS_bBotsMethod entirely, because testing
-    live tonight showed that flag doesn't actually gate spawning on this build
-    (writing it true/false made no difference to ShouldSpawnBots()'s return, and
-    the real logic turned out to be buried in a generic Settings-Manager system
-    with no direct property or setter reachable by reflection).
-
-    Generation-guarded (one keeper loop only, per the UE4SS skill's own rule) --
-    calling this again supersedes any fill already in progress rather than
-    stacking a second timer."""
+    """Manually fills to target_count via GameMode:SpawnBot(), one per 4s,
+    bypassing ShouldSpawnBots()/HMS_bBotsMethod entirely -- see
+    1-DOCUMENTATION.md §5.5 for why. Generation-guarded: calling this again
+    supersedes any fill already in progress rather than stacking a second
+    timer."""
     lua = f"""
 local function vld(o) if o==nil then return false end local ok,v=pcall(function() return o:IsValid() end) return ok and v==true end
 local gm = (FindAllOf('GameModeBase') or {{}})[1]
@@ -453,21 +448,12 @@ return 'bot fill gen ' .. MYGEN .. ' armed, target=' .. TARGET
 
 def set_explosive_bullets(enabled, damage=50.0, radius=300.0, timeout=15):
     """Registers (once per process) a post-hook on WEP_C:SpawnImpactEffects --
-    the function that fires on EVERY bullet impact -- and, while enabled, calls
-    the engine's own ApplyRadialDamage at the hit location. This is explicitly
-    the kind of hot-path hook the UE4SS skill warns against ('hooking a
-    per-bullet function is asking for it'), so the safeguards here are load-
-    bearing, not decorative:
-      - the hook body checks the enabled flag FIRST and returns immediately if
-        off, so a disabled toggle costs one table lookup per shot, not a full
-        damage call
-      - the hook is registered exactly once per process (guarded), never
-        re-registered on repeat toggles -- re-hooking is its own crash risk
-      - the actual work is a single native ApplyRadialDamage call (all in-params,
-        the safe calling shape), no ExecuteInGameThread/timers stacked on top
-      - everything is pcall-wrapped so one bad hit can't take the hook chain down
-    Not independently verified against live rapid-fire yet -- enable it and
-    test with a few individual shots before trusting it in a real firefight."""
+    fires on EVERY bullet impact -- and, while enabled, calls the engine's own
+    ApplyRadialDamage at the hit location. A hot-path hook, so its guards
+    (enabled-check first, one-time registration, pcall-wrapped) are
+    load-bearing, not decorative -- see 1-DOCUMENTATION.md §5.5. Not
+    independently verified against live rapid-fire yet -- test with a few
+    individual shots before trusting it in a real firefight."""
     lua = f"""
 _G.EXPLOSIVE_BULLETS = _G.EXPLOSIVE_BULLETS or {{enabled = false, damage = 50.0, radius = 300.0}}
 _G.EXPLOSIVE_BULLETS.enabled = {str(bool(enabled)).lower()}
@@ -502,13 +488,10 @@ return 'explosive bullets: enabled=' .. tostring(_G.EXPLOSIVE_BULLETS.enabled) .
 def enable_all_nametags(timeout=15):
     """Forces every W_PlayerIndicator_C (the same widget that shows teammate
     nametags in Versus/TDM) visible, regardless of team -- a periodic keeper
-    loop, since these widgets are pooled/reused and new ones appear over time
-    as players come in range. Confirmed live: bShouldBeHidden + SetVisibility(0)
-    HOLD once forced (unlike Fly/Ghost, nothing fights it back), but the actual
-    name only populates once the game's own logic binds that widget to a nearby
-    player -- this can't be verified by reflection alone since it likely depends
-    on real proximity/line-of-sight during actual gameplay, so try it live and
-    see what actually shows up."""
+    loop since these widgets are pooled/reused and new ones appear as players
+    come in range. Whether a name actually populates depends on the game's own
+    proximity/line-of-sight logic, which can't be verified by reflection alone
+    -- try it live and see what shows up."""
     lua = r"""
 _G.NAMETAGS = _G.NAMETAGS or {}
 _G.NAMETAGS.gen = (_G.NAMETAGS.gen or 0) + 1
@@ -548,24 +531,12 @@ def stop_bot_fill(timeout=10):
 
 def host_and_travel(map_path, gamemode_class, cap, team_size, private, bots, session_name="Custom Match", timeout=20):
     """Full flow: end current round if in one (wait for it to settle), travel to
-    map+mode, then write cap/team AFTER the new mode has loaded.
-
-    Each gamemode has its OWN persistent cap asset (confirmed tonight: switching
-    Deathmatch cap=20 -> Versus came back at Versus's own default of 10) -- so
-    writing the cap only makes sense once the TARGET mode's GameMode instance
-    actually exists, which means after the travel, not before.
-
-    private=True calls UpdateLobbyAccessMethod(true) (confirmed live: this takes a
-    single plain bool, unlike the settings-manager-buried bot flag) plus sets a
-    session password as a second layer. private=False calls
-    UpdateLobbyAccessMethod(false) and re-advertises so it's discoverable.
-
-    bots: HMS_bBotsMethod turned out to live on the GameMode not the GameInstance
-    (fixed), but flipping it doesn't actually change ShouldSpawnBots()'s answer --
-    that logic is buried in a generic Settings-Manager UI system with no direct
-    property/setter reachable by reflection. So when bots=True we bypass it
-    entirely and spawn bots manually via spawn_bots_to_target() (same technique
-    verified working earlier tonight for a 24/32-player fill).
+    map+mode, then write cap/team AFTER the new mode has loaded -- each gamemode
+    has its own persistent cap asset, so writing it only makes sense once the
+    target mode's GameMode instance actually exists (see 1-DOCUMENTATION.md
+    §5.5). private=True sets both UpdateLobbyAccessMethod(true) and a session
+    password as a second layer; bots=True bypasses HMS_bBotsMethod entirely and
+    spawns manually via spawn_bots_to_target() (same section explains why).
     """
     import time
     state = get_live_state(timeout=timeout)
@@ -639,10 +610,8 @@ def cycle_match(fallback_map_path=None, private=False, bots=True, timeout=20):
     level_name = get_current_level_name(timeout=timeout)
     map_path = None
     if level_name:
-        # The game's own mode rotation loads per-mode-prefixed variants (DM_Airsoft,
-        # TDM_BombHouse, GG_CQB, ...), not the bare package name in maps.json --
-        # strip a known mode prefix before comparing. Confirmed live: rotation
-        # landed on "DM_BombHouse" while maps.json has "BombHouse".
+        # Mode rotation uses per-mode-prefixed level names, not maps.json's bare
+        # package name -- strip a known prefix before comparing (1-DOCUMENTATION.md §5.5).
         bare = level_name
         for prefix in ("DM_", "TDM_", "GG_", "HP_", "BB_", "VS_", "WM_"):
             if bare.startswith(prefix):

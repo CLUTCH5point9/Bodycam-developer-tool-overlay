@@ -32,4 +32,5 @@ It does NOT cover:
   - Individual Plugin files (JSON files people write/share for the Plugins tab)
     -- each plugin is its own author's separate creative work. This project
     doesn't claim any license over plugin content; how a plugin's author
-    chooses to license or share it is entirely up to them. See PLUGINS.txt.
+    chooses to license or share it is entirely up to them. See
+    1-DOCUMENTATION.md §3.6.

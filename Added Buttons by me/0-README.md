@@ -13,7 +13,6 @@ over time as they're built and tested.
 4. Your saved buttons list now includes whatever was in it (you'll be asked
    before anything gets overwritten if a name already exists).
 
-See [CONSOLE_AND_SHELL.txt](../CONSOLE_AND_SHELL.txt) for how the Console tab
-and its buttons actually work, and [PLUGINS.txt](../PLUGINS.txt) for the
-underlying file format (Saved Command Buttons and Plugins share the same
-widget shape).
+See [1-DOCUMENTATION.md](../1-DOCUMENTATION.md) for how the Console tab and
+its buttons actually work (§1) and the underlying file format (§3) — Saved
+Command Buttons and Plugins share the same widget shape.

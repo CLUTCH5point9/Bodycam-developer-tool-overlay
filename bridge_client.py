@@ -1,7 +1,8 @@
-"""Minimal client for the ClaudeBridge file-RPC protocol (same protocol as bridge.py).
+"""Minimal client for the ClaudeBridge file-RPC protocol.
 
-Talks to the ClaudeBridge UE4SS mod over two files under %LOCALAPPDATA%\\Temp\\<name>_bridge.
-Both sides write to a temp name and rename, so neither ever reads a half-written file.
+Talks to the ClaudeBridge UE4SS mod (mod/ClaudeBridge/Scripts/main.lua) over
+two files under %LOCALAPPDATA%\\Temp\\<name>_bridge. Protocol shape and
+design rationale: see 1-DOCUMENTATION.md section 5.1.
 """
 import os
 import time
